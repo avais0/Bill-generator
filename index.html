@@ -1,12 +1,166 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    
-   <script src="main.js"></script>  
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Expence Traker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- jsPDF and autoTable for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        .card-hover:hover {
+            transform: translateY(-2px);
+            transition: all 0.2s ease;
+
+        }
+        input:focus, select:focus, button:focus {
+            outline: none;
+            ring: 2px solid #3b82f6;
+        }
+        html {
+            scroll-behavior: smooth;
+            
+        }
+        .currency-selector {
+            background-color: #f9fafb;
+            border-radius: 1rem;
+            
+        }
+    </style>
+  </head>
+ <body class="bg-gradient-to-br from-slate-50 to-gray-100 font-sans antialiased">
+
+    <div class="container max-w-6xl mx-auto px-4 py-6 md:py-8">
+        <!-- Header + Currency Switcher + PDF button -->
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-3">
+            <div class="text-center sm:text-left">
+                <h1 class="text-3xl md:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-indigo-700 to-purple-700 inline-flex items-center gap-2">
+                    <i class="fas fa-wallet text-indigo-600"></i> Monthly Expense Tracker
+                </h1>
+                <p class="text-gray-500 text-sm">Track, analyze & control spending (PKR / USD)</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center gap-2 bg-white shadow-sm rounded-full px-4 py-2 border">
+                    <i class="fas fa-exchange-alt text-gray-500 text-sm"></i>
+                    <span class="text-sm font-medium text-gray-700">Currency:</span>
+                    <select id="currencySelector" class="bg-transparent font-semibold text-gray-800 focus:outline-none cursor-pointer">
+                        <option value="USD">🇺🇸 USD ($)</option>
+                        <option value="PKR">🇵🇰 PKR (Rs)</option>
+                    </select>
+                </div>
+                <button id="downloadPdfBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full shadow-sm transition flex items-center gap-2 text-sm font-medium">
+                    <i class="fas fa-file-pdf"></i> Download PDF Report
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Grid: summary + month selector + chart -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Left: Month selector & total summary -->
+            <div class="bg-white rounded-2xl shadow-md p-5 border border-gray-100">
+                <div class="flex flex-col space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1"><i class="far fa-calendar-alt mr-1"></i> Select Month</label>
+                        <input type="month" id="monthSelector" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-300 transition">
+                    </div>
+                    <div class="bg-indigo-50 rounded-xl p-4 text-center">
+                        <p class="text-sm text-indigo-700 font-medium">💰 Total Spending</p>
+                        <p id="monthTotalDisplay" class="text-3xl md:text-4xl font-bold text-indigo-800 mt-1">$0.00</p>
+                        <p class="text-xs text-gray-500 mt-1">for selected month</p>
+                    </div>
+                    <button id="clearAllBtn" class="mt-2 w-full bg-red-50 hover:bg-red-100 text-red-700 font-medium py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm border border-red-200">
+                        <i class="fas fa-trash-alt"></i> Clear All Expenses
+                    </button>
+                </div>
+            </div>
+
+            <!-- Middle + Right: Chart (category breakdown) -->
+            <div class="lg:col-span-2 bg-white rounded-2xl shadow-md p-5 border border-gray-100">
+                <div class="flex justify-between items-center flex-wrap gap-2 mb-3">
+                    <h2 class="font-bold text-gray-800 text-lg"><i class="fas fa-chart-pie text-indigo-500 mr-2"></i> Spending by Category</h2>
+                    <span class="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">current month</span>
+                </div>
+                <div class="relative h-64 md:h-56 w-full">
+                    <canvas id="expenseChart" width="400" height="300" class="max-h-56 w-auto mx-auto"></canvas>
+                    <div id="chartNoDataMsg" class="hidden text-center text-gray-400 absolute inset-0 flex items-center justify-center">No expenses for this month</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add / Edit Expense Form -->
+        <div class="bg-white rounded-2xl shadow-md p-5 mb-8 border border-gray-100 transition-all">
+            <div class="flex items-center gap-2 mb-4">
+                <i class="fas fa-plus-circle text-indigo-500 text-xl"></i>
+                <h2 class="text-xl font-bold text-gray-800" id="formTitle">Add New Expense</h2>
+                <span id="editBadge" class="hidden bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full ml-2">✏️ Editing mode</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Description</label>
+                    <input type="text" id="expenseDesc" placeholder="e.g., Groceries" class="w-full border border-gray-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Amount</label>
+                    <div class="relative">
+                        <span id="amountPrefixSymbol" class="absolute left-3 top-2.5 text-gray-500 text-sm">$</span>
+                        <input type="number" id="expenseAmount" placeholder="0.00" step="0.01" min="0.01" class="w-full border border-gray-300 rounded-xl px-7 py-2 focus:ring-2 focus:ring-indigo-300">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Category</label>
+                    <select id="expenseCategory" class="w-full border border-gray-300 rounded-xl px-3 py-2 bg-white">
+                        <option value="Food">🍔 Food</option>
+                        <option value="Transport">🚗 Transport</option>
+                        <option value="Shopping">🛍️ Shopping</option>
+                        <option value="Bills">💡 Bills</option>
+                        <option value="Entertainment">🎬 Entertainment</option>
+                        <option value="Health">🏥 Health</option>
+                        <option value="Other">📌 Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Date</label>
+                    <input type="date" id="expenseDate" class="w-full border border-gray-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-300">
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-3 mt-5 justify-end">
+                <button id="cancelEditBtn" class="px-5 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-100 transition hidden">Cancel Edit</button>
+                <button id="submitExpenseBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl font-semibold shadow-sm transition flex items-center gap-2"><i class="fas fa-save"></i> Add Expense</button>
+            </div>
+            <div id="formErrorMsg" class="text-red-500 text-xs mt-3 hidden"></div>
+        </div>
+
+        <!-- Expenses List Table -->
+        <div class="bg-white rounded-2xl shadow-md overflow-hidden border border-gray-100">
+            <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center flex-wrap gap-2">
+                <h2 class="font-bold text-gray-800 text-lg"><i class="fas fa-list-ul text-indigo-500 mr-2"></i> Expense History</h2>
+                <span id="expenseCountBadge" class="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs">0 items</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                            <th class="px-5 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expensesTableBody" class="divide-y divide-gray-100">
+                        <tr><td colspan="5" class="text-center py-8 text-gray-400">No expenses for this month. Add one!</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+      <footer class="text-center text-gray-400 text-xs mt-8">
+        📊 All data saved locally. Currency preference is remembered. copyright
+        &copy; 2024 | Developed by Avais Ahmed mehdi
+      </footer>
+    </div>
+  </body>
+  <script src="main.js"></script>
 </html>
